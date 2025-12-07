@@ -1,7 +1,7 @@
 // src/pages/api/v1/auth/signup.js
 import { runCors } from "../../lib/cors";
 import connectDB from "../../lib/mongoose";
-import User from "../../models/Customer";      // email-based schema
+import Customer from "../../models/Customer"; // email-based schema
 import OtpSession from "../../models/OtpSession";
 import { signAuthToken } from "../../lib/jwt";
 
@@ -38,7 +38,7 @@ export default async function handler(req, res) {
     const now = new Date();
 
     // 1️⃣ Check if user already fully registered
-    let existingUser = await User.findOne({ email: cleanedEmail });
+    let existingUser = await Customer.findOne({ email: cleanedEmail });
 
     if (existingUser && existingUser.name) {
       return res.status(409).json({
@@ -80,7 +80,7 @@ export default async function handler(req, res) {
       existingUser.name = trimmedName;
       userDoc = await existingUser.save();
     } else {
-      userDoc = await User.create({
+      userDoc = await Customer.create({
         name: trimmedName,
         email: cleanedEmail,
       });

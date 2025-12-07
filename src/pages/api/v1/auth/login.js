@@ -1,6 +1,6 @@
 // src/app/api/auth/signup/route.js
-import connectDB from "@/lib/mongoose";
-import User from "@/models/User";
+import connectDB from "../../lib/mongoose";
+import Customer from "../../models/Customer";
 
 export async function POST(req) {
   try {
@@ -21,7 +21,7 @@ export async function POST(req) {
 
     const cleanedPhone = String(phone).replace(/\s+/g, "");
 
-    const user = await User.findOne({ phone: cleanedPhone });
+    const user = await Customer.findOne({ phone: cleanedPhone });
 
     if (!user) {
       return new Response(
@@ -74,8 +74,6 @@ export async function POST(req) {
     user.otpExpiresAt = undefined;
     await user.save();
 
-    // TODO: create real auth session / JWT here
-    // For now we just return the user object
     return new Response(
       JSON.stringify({
         success: true,
