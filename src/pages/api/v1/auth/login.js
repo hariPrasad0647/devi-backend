@@ -1,4 +1,4 @@
-// src/app/api/auth/signup/route.js
+// src/app/api/auth/signup/route
 import connectDB from "../../lib/mongoose";
 import Customer from "../../models/Customer";
 
