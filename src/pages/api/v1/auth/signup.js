@@ -19,7 +19,7 @@ export default async function handler(req, res) {
       .status(405)
       .json({ success: false, message: "Method not allowed" });
   }
-
+//added comment
   try {
     await connectDB();
 
