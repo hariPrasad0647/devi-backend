@@ -26,15 +26,15 @@ export default async function handler(req, res) {
   // --- Setup: detect available Brevo creds and prepare smtpTransporter if possible ---
   // Accept multiple env patterns:
   // - BREVO_API_KEY (REST) -> should begin with xkeysib-....
-  // - BREVO_API_KEY (if it begins with xsmtpsib-...) -> treat as SMTP password
+  // - BREVO_API_KEY (if it begins with xsmtpsib-...) -> treat as SMTP password (if SMTP user provided)
   // - BREVO_SMTP_USER + BREVO_SMTP_PASS -> explicit SMTP
   let smtpTransporter = null;
   try {
-    const restKey = process.env.BREVO_API_KEY; // could be REST key (xkeysib-) or SMTP key (xsmtpsib-)
-    const explicitSmtpUser = process.env.BREVO_SMTP_USER || process.env.SMTP_USER;
-    const explicitSmtpPass = process.env.BREVO_SMTP_PASS || process.env.SMTP_PASS;
+    const restKeyCandidate = process.env.BREVO_API_KEY || process.env.BREVO_V3_KEY || null; // prefer REST key but accept alt name
+    const explicitSmtpUser = process.env.BREVO_SMTP_USER || process.env.SMTP_USER || null;
+    const explicitSmtpPass = process.env.BREVO_SMTP_PASS || process.env.SMTP_PASS || null;
 
-    // If explicit SMTP creds provided use them
+    // 1) If explicit SMTP creds provided, use them
     if (explicitSmtpUser && explicitSmtpPass) {
       smtpTransporter = nodemailer.createTransport({
         host: process.env.BREVO_SMTP_HOST || "smtp-relay.brevo.com",
@@ -52,8 +52,9 @@ export default async function handler(req, res) {
       smtpTransporter.verify().catch((err) => {
         console.warn("[payments/verify] SMTP transporter verify failed:", err?.message || err);
       });
-    } else if (restKey && restKey.startsWith("xsmtpsib-") && explicitSmtpUser) {
-      // You put an SMTP key into BREVO_API_KEY (xsmtpsib-...). Use it as password with the SMTP user.
+    } else if (restKeyCandidate && restKeyCandidate.startsWith("xsmtpsib-") && explicitSmtpUser) {
+      // 2) If you put an SMTP key into BREVO_API_KEY (xsmtpsib-...) and also provided SMTP user,
+      //    use the xsmtpsib token as SMTP password.
       smtpTransporter = nodemailer.createTransport({
         host: process.env.BREVO_SMTP_HOST || "smtp-relay.brevo.com",
         port: Number(process.env.BREVO_SMTP_PORT || process.env.SMTP_PORT || 587),
@@ -63,7 +64,7 @@ export default async function handler(req, res) {
           false,
         auth: {
           user: explicitSmtpUser,
-          pass: restKey, // use the xsmtpsib- token as SMTP password
+          pass: restKeyCandidate, // use xsmtpsib token as SMTP password
         },
       });
 
@@ -71,7 +72,7 @@ export default async function handler(req, res) {
         console.warn("[payments/verify] SMTP transporter verify failed (using BREVO_API_KEY as SMTP password):", err?.message || err);
       });
     } else {
-      // no SMTP transporter configured; we'll still attempt REST if xkeysib- present
+      // no SMTP transporter configured; we'll still attempt REST if REST key (xkeysib-) present
     }
   } catch (err) {
     console.error("[payments/verify] SMTP transporter setup error:", err);
@@ -86,7 +87,8 @@ export default async function handler(req, res) {
    * This is best-effort; logs errors and returns info but does not throw to break main flow.
    */
   async function sendOrderConfirmationEmail(order) {
-    const REST_KEY = process.env.BREVO_API_KEY; // may be REST key or SMTP key
+    // Accept either env name: BREVO_API_KEY (common) or BREVO_V3_KEY (alternate)
+    const REST_KEY = process.env.BREVO_API_KEY || process.env.BREVO_V3_KEY || null;
     const EMAIL_FROM = process.env.EMAIL_FROM || "Devi Foods <no-reply@yourdomain.com>";
     const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || process.env.SMTP_USER || "support@yourdomain.com";
 
@@ -103,7 +105,9 @@ export default async function handler(req, res) {
       (order.customer && order.customer.email) ||
       null;
 
+    // prefer name passed inside paymentDetails (frontend should send it), then other fields
     const customerName =
+      order.paymentDetails?.name ||
       order.customerName ||
       order.customer?.name ||
       order.name ||
@@ -113,6 +117,7 @@ export default async function handler(req, res) {
       recipientEmail,
       derivedFrom: {
         paymentDetailsEmail: order.paymentDetails?.email,
+        paymentDetailsName: order.paymentDetails?.name,
         customerEmail: order.customerEmail || order.email,
         customerObjEmail: order.customer?.email,
       },
@@ -225,6 +230,15 @@ export default async function handler(req, res) {
     }
 
     const sender = parseFrom(EMAIL_FROM);
+
+    // =========== DEBUG: log which envs/keys are present (keep while diagnosing on Vercel) ===========
+    console.log("[payments/verify] env debug:", {
+      hasBrevoApiKey: !!process.env.BREVO_API_KEY,
+      hasBrevoV3Key: !!process.env.BREVO_V3_KEY,
+      hasBrevoSmtpUser: !!process.env.BREVO_SMTP_USER,
+      hasBrevoSmtpPass: !!process.env.BREVO_SMTP_PASS,
+      emailFrom: process.env.EMAIL_FROM,
+    });
 
     // 1) If REST key present and looks like a REST key (xkeysib-) -> send via Brevo REST
     if (REST_KEY && REST_KEY.startsWith("xkeysib-")) {
