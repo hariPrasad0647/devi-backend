@@ -1,99 +1,69 @@
-// src/app/api/auth/signup/route
+// src/pages/api/v1/auth/login.js
+
 import connectDB from "../../lib/mongoose";
 import Customer from "../../models/Customer";
 
-export async function POST(req) {
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ success: false, message: "Method not allowed" });
+  }
+
   try {
     await connectDB();
 
-    const body = await req.json().catch(() => ({}));
-    const { name, phone, otp } = body;
+    const { phone, otp } = req.body || {};
 
     if (!phone || !otp) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          message: "Phone and OTP are required",
-        }),
-        { status: 400 }
-      );
+      return res
+        .status(400)
+        .json({ success: false, message: "Phone and OTP are required" });
     }
 
     const cleanedPhone = String(phone).replace(/\s+/g, "");
-
     const user = await Customer.findOne({ phone: cleanedPhone });
 
     if (!user) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          message: "User / OTP session not found. Please request OTP again.",
-        }),
-        { status: 404 }
-      );
+      return res
+        .status(404)
+        .json({ success: false, message: "User / OTP session not found" });
     }
 
     if (!user.otp || !user.otpExpiresAt) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          message: "No OTP generated. Please request OTP again.",
-        }),
-        { status: 400 }
-      );
+      return res
+        .status(400)
+        .json({ success: false, message: "No OTP generated. Please request OTP again." });
     }
 
     const now = new Date();
     if (now > user.otpExpiresAt) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          message: "OTP expired. Please request a new one.",
-        }),
-        { status: 400 }
-      );
+      return res
+        .status(400)
+        .json({ success: false, message: "OTP expired. Please request a new one." });
     }
 
     if (String(otp).trim() !== user.otp) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          message: "Invalid OTP",
-        }),
-        { status: 400 }
-      );
+      return res.status(400).json({ success: false, message: "Invalid OTP" });
     }
 
-    // OTP is correct – finalize user data
-    if (name && name.trim() && user.name !== name.trim()) {
-      user.name = name.trim();
-    }
-
-    // clear OTP fields so they can’t be reused
+    // clear OTP after successful login
     user.otp = undefined;
     user.otpExpiresAt = undefined;
     await user.save();
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: "Signup / login successful",
-        user: {
-          id: user._id,
-          name: user.name,
-          phone: user.phone,
-        },
-      }),
-      { status: 200 }
-    );
+    return res.status(200).json({
+      success: true,
+      message: "Login successful",
+      user: {
+        id: user._id,
+        name: user.name,
+        phone: user.phone,
+      },
+    });
   } catch (err) {
-    console.error("signup error:", err);
-    return new Response(
-      JSON.stringify({
-        success: false,
-        message: "Signup failed",
-      }),
-      { status: 500 }
-    );
+    console.error("[login handler] error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Login failed",
+    });
   }
 }
