@@ -1,8 +1,9 @@
 // src/lib/mailer.js
 import nodemailer from "nodemailer";
 
-const smtpUser = process.env.BREVO_SMTP_USER || process.env.EMAIL_FROM;
-const smtpKey = process.env.BREVO_API_KEY; // your xsmtpsib- key
+const smtpUser = process.env.BREVO_SMTP_USER;
+const smtpKey = process.env.BREVO_SMTP_PASS; // ✅ correct
+
 const fromEmail = process.env.EMAIL_FROM;
 
 if (!smtpUser || !smtpKey || !fromEmail) {

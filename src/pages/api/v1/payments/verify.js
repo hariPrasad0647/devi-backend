@@ -52,25 +52,6 @@ export default async function handler(req, res) {
       smtpTransporter.verify().catch((err) => {
         console.warn("[payments/verify] SMTP transporter verify failed:", err?.message || err);
       });
-    } else if (restKeyCandidate && restKeyCandidate.startsWith("xsmtpsib-") && explicitSmtpUser) {
-      // 2) If you put an SMTP key into BREVO_API_KEY (xsmtpsib-...) and also provided SMTP user,
-      //    use the xsmtpsib token as SMTP password.
-      smtpTransporter = nodemailer.createTransport({
-        host: process.env.BREVO_SMTP_HOST || "smtp-relay.brevo.com",
-        port: Number(process.env.BREVO_SMTP_PORT || process.env.SMTP_PORT || 587),
-        secure:
-          (process.env.BREVO_SMTP_SECURE === "true") ||
-          (process.env.SMTP_SECURE === "true") ||
-          false,
-        auth: {
-          user: explicitSmtpUser,
-          pass: restKeyCandidate, // use xsmtpsib token as SMTP password
-        },
-      });
-
-      smtpTransporter.verify().catch((err) => {
-        console.warn("[payments/verify] SMTP transporter verify failed (using BREVO_API_KEY as SMTP password):", err?.message || err);
-      });
     } else {
       // no SMTP transporter configured; we'll still attempt REST if REST key (xkeysib-) present
     }
@@ -82,13 +63,16 @@ export default async function handler(req, res) {
   /**
    * Send order confirmation — supports:
    * 1) Brevo REST if REST key (xkeysib-) present
-   * 2) fallback: SMTP using BREVO_SMTP_USER + BREVO_SMTP_PASS OR BREVO_SMTP_USER + BREVO_API_KEY (xsmtpsib-)
-   *
+     *
    * This is best-effort; logs errors and returns info but does not throw to break main flow.
    */
   async function sendOrderConfirmationEmail(order) {
     // Accept either env name: BREVO_API_KEY (common) or BREVO_V3_KEY (alternate)
-    const REST_KEY = process.env.BREVO_API_KEY || process.env.BREVO_V3_KEY || null;
+    const REST_KEY =
+      process.env.BREVO_API_KEY?.startsWith("xkeysib-")
+        ? process.env.BREVO_API_KEY
+        : null;
+
     const EMAIL_FROM = process.env.EMAIL_FROM || "Devi Foods <no-reply@yourdomain.com>";
     const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || process.env.SMTP_USER || "support@yourdomain.com";
 
@@ -142,17 +126,17 @@ export default async function handler(req, res) {
     const items = Array.isArray(order.items) ? order.items : [];
     const itemsHtml = items.length
       ? items
-          .map((it) => {
-            const name = escapeHtml(it.name || it.title || it.productId || "Item");
-            const qty = it.qty ?? it.quantity ?? 1;
-            const price = fmtINR(it.price ?? it.amount ?? 0);
-            return `<tr>
+        .map((it) => {
+          const name = escapeHtml(it.name || it.title || it.productId || "Item");
+          const qty = it.qty ?? it.quantity ?? 1;
+          const price = fmtINR(it.price ?? it.amount ?? 0);
+          return `<tr>
               <td style="padding:8px 12px;border:1px solid #eee">${name}</td>
               <td style="padding:8px 12px;border:1px solid #eee;text-align:center">${escapeHtml(String(qty))}</td>
               <td style="padding:8px 12px;border:1px solid #eee;text-align:right">${price}</td>
             </tr>`;
-          })
-          .join("")
+        })
+        .join("")
       : `<tr><td colspan="3" style="padding:8px 12px;border:1px solid #eee">No items</td></tr>`;
 
     const address = order.address || {};
