@@ -64,7 +64,7 @@ export default async function handler(req, res) {
    * Send order confirmation — supports:
    * 1) Brevo REST if REST key (xkeysib-) present
      *
-   * This is best-effort; logs errors and returns info but does not throw to break main flow.
+   * 
    */
   async function sendOrderConfirmationEmail(order) {
     // Accept either env name: BREVO_API_KEY (common) or BREVO_V3_KEY (alternate)
