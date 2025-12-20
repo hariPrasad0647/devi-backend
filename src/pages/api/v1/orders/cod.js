@@ -5,8 +5,7 @@ import { runCors } from "../../lib/cors"; // <-- your cors helper
 
 export default async function handler(req, res) {
   // --- USE YOUR CORS HELPER ---
-  await runCors(req, res); // <-- added
-
+  await runCors(req, res); //
   // --- Only allow POST ---
   if (req.method === "OPTIONS") {
     return res.status(200).end();
